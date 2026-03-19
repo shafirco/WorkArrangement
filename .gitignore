@@ -28,6 +28,5 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Ignore markdown files except main README
+# Ignore markdown files
 *.md
-!README.md

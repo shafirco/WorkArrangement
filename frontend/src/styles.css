@@ -1,0 +1,109 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f2f6fb;
+}
+
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.employees {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.employee-box {
+  border: 1px solid #d6ddea;
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fbfdff;
+}
+
+.availability-row {
+  display: flex;
+  gap: 6px;
+}
+
+button {
+  border: none;
+  border-radius: 8px;
+  background: #1266d1;
+  color: white;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.7;
+}
+
+input,
+select {
+  border: 1px solid #c9d3e1;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+th,
+td {
+  border: 1px solid #d7dce5;
+  padding: 8px;
+  text-align: center;
+  vertical-align: top;
+}
+
+.warn-box {
+  background: #fff7e6;
+  border: 1px solid #ffd89a;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.export-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.error {
+  color: #b30000;
+}
+
+.shift-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 120px;
+}
+
+.empty-cell {
+  color: #9aa7ba;
+  background: #f9fbff;
+}
+
+.unassigned-cell {
+  background: #ffe6e6;
+  border-color: #ffb3b3;
+}
