@@ -28,5 +28,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Cursor — מקומי בלבד (הקשר + rules; לא בריפו)
+.cursor/
+backend/.cursor
+frontend/.cursor
 # Ignore markdown files
 *.md

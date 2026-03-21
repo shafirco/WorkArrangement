@@ -14,6 +14,8 @@ const DAYS = [
 
 const emptyAvailability = { day: "sunday", start: "10:00", end: "16:00" };
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const SCHEDULE_FETCH_TIMEOUT_MS = 90_000;
+const MAX_EMPLOYEE_NAME_LEN = 200;
 
 function toMinutes(timeValue) {
   const [hh, mm] = timeValue.split(":").map(Number);
@@ -46,8 +48,17 @@ export default function App() {
     setEmployees((prev) => prev.map((emp) => (emp.id === id ? updater(emp) : emp)));
   };
 
+  const clearApiError = () => setApiError("");
+
   const addEmployee = () => {
+    clearApiError();
     setEmployees((prev) => [...prev, createEmployee(Date.now())]);
+  };
+
+  const removeEmployee = (id) => {
+    clearApiError();
+    setSchedule(null);
+    setEmployees((prev) => prev.filter((e) => e.id !== id));
   };
 
   const addAvailability = (employeeId) => {
@@ -75,52 +86,85 @@ export default function App() {
     setApiError("");
     setSchedule(null);
 
-    const normalizedEmployees = employees
-      .map((e) => ({
-        ...e,
-        name: e.name.trim(),
-        availability: (e.availability || []).filter((a) => a.day && a.start && a.end)
-      }))
-      .filter((e) => e.name.length > 0);
-
-    if (normalizedEmployees.length === 0) {
-      setApiError("יש להזין לפחות עובד אחד עם שם.");
+    if (employees.length === 0) {
+      setApiError("אין עובדים ברשימה. לחץ על + הוסף עובד.");
       return;
     }
 
+    const unnamedRowNumbers = employees
+      .map((e, i) => (!String(e.name || "").trim() ? i + 1 : null))
+      .filter((n) => n != null);
+    if (unnamedRowNumbers.length > 0) {
+      setApiError(
+        `יש למלא שם לכל העובדים (חסר שם בעובדים מס׳ ${unnamedRowNumbers.join(", ")}). אפשר למחוק שורה מיותרת עם ×.`
+      );
+      return;
+    }
+
+    const normalizedEmployees = employees.map((e) => ({
+      ...e,
+      name: e.name.trim(),
+      availability: (e.availability || []).filter((a) => a.day && a.start && a.end)
+    }));
+
     const employeeMissingAvailability = normalizedEmployees.find((e) => e.availability.length === 0);
     if (employeeMissingAvailability) {
-      setApiError(`לעובד ${employeeMissingAvailability.name} אין זמינות תקינה.`);
+      setApiError(`לעובד ${employeeMissingAvailability.name} אין זמינות תקינה (הוסף טווח שעות או מחק שורת זמינות ריקה).`);
       return;
     }
 
     setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SCHEDULE_FETCH_TIMEOUT_MS);
     try {
-      const payload = {
-        employees: normalizedEmployees
-      };
-
+      const payload = { employees: normalizedEmployees };
       const res = await fetch(`${API_BASE}/api/schedule/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
-      const data = await res.json();
+
+      const raw = await res.text();
+      let data = null;
+      if (raw.trim()) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          throw new Error(
+            res.ok
+              ? "תגובת השרת לא בפורמט תקין."
+              : `השרת החזיר תשובה לא צפויה (${res.status}). בדוק את כתובת ה-API ושהשרת רץ.`
+          );
+        }
+      } else if (!res.ok) {
+        throw new Error(
+          `השרת החזיר תשובה ריקה (${res.status}). בדוק את כתובת ה-API ושהשרת רץ.`
+        );
+      }
+
       if (!res.ok) {
         const detailsText = Array.isArray(data?.details)
           ? data.details.map((d) => `${d.path?.join(".") || "field"}: ${d.message}`).join(" | ")
           : "";
-        throw new Error([data?.error, detailsText].filter(Boolean).join(" - ") || "Failed");
+        const msg = [data?.message, data?.error, detailsText].filter(Boolean).join(" — ") || "הבקשה נדחתה.";
+        throw new Error(msg);
+      }
+      if (!data || typeof data !== "object") {
+        throw new Error("תגובת השרת חסרה או לא תקינה.");
       }
       setSchedule(data);
     } catch (err) {
-      if (String(err?.message || "").includes("Invalid payload")) {
-        setApiError(`הנתונים לא תקינים: ${err.message}`);
+      if (err?.name === "AbortError") {
+        setApiError("פג הזמן — השרת לא הגיב. בדוק חיבור ושהשרת רץ.");
+      } else if (err?.message === "Failed to fetch" || err?.name === "TypeError") {
+        setApiError("לא ניתן להתחבר לשרת. בדוק שכתובת ה-API נכונה ושהשרת הופעל.");
       } else {
-        setApiError("הייתה שגיאה ביצירת הסידור. בדוק שהשרת רץ.");
+        setApiError(err?.message || "הייתה שגיאה ביצירת הסידור.");
       }
       console.error(err);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -279,76 +323,132 @@ export default function App() {
 
   return (
     <div className="page">
-      <h1>מערכת סידור עבודה - גלידרייה</h1>
+      <h1>מערכת סידור עבודה - GOLDA PETAH TIKVA</h1>
 
       <section className="card">
         <h2>עובדים וזמינויות</h2>
-        <button onClick={addEmployee}>+ הוסף עובד</button>
-        <div className="employees">
-          {employees.map((employee) => (
-            <div key={employee.id} className="employee-box">
-              <input
-                placeholder="שם עובד"
-                value={employee.name}
-                onChange={(e) => updateEmployee(employee.id, (emp) => ({ ...emp, name: e.target.value }))}
-              />
-              <label>
-                <input
-                  type="checkbox"
-                  checked={employee.isManager}
-                  onChange={(e) =>
-                    updateEmployee(employee.id, (emp) => ({
-                      ...emp,
-                      isManager: e.target.checked
-                    }))
-                  }
-                />
-                אחמ״ש
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={employee.preferredForMoreShifts}
-                  onChange={(e) =>
-                    updateEmployee(employee.id, (emp) => ({
-                      ...emp,
-                      preferredForMoreShifts: e.target.checked
-                    }))
-                  }
-                />
-                עדיפות ליותר משמרות
-              </label>
+        <form
+          className="schedule-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            generateSchedule();
+          }}
+        >
+          <button type="button" onClick={addEmployee}>
+            + הוסף עובד
+          </button>
+          <div className="employees">
+            {employees.length === 0 ? (
+              <p className="empty-hint">אין עובדים — לחץ + הוסף עובד.</p>
+            ) : (
+              employees.map((employee, empIndex) => (
+                <div key={employee.id} className="employee-box">
+                  <div className="employee-box-header">
+                    <span className="employee-box-title">עובד {empIndex + 1}</span>
+                    <button
+                      type="button"
+                      className="btn-remove-employee"
+                      onClick={() => removeEmployee(employee.id)}
+                      title="הסר עובד"
+                      aria-label={`הסר את עובד ${empIndex + 1}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <input
+                    placeholder="שם עובד (חובה)"
+                    autoComplete="name"
+                    value={employee.name}
+                    maxLength={MAX_EMPLOYEE_NAME_LEN}
+                    onChange={(e) => {
+                      clearApiError();
+                      updateEmployee(employee.id, (emp) => ({ ...emp, name: e.target.value }));
+                    }}
+                  />
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={employee.isManager}
+                      onChange={(e) =>
+                        updateEmployee(employee.id, (emp) => ({
+                          ...emp,
+                          isManager: e.target.checked
+                        }))
+                      }
+                    />
+                    אחמ״ש
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={employee.preferredForMoreShifts}
+                      onChange={(e) =>
+                        updateEmployee(employee.id, (emp) => ({
+                          ...emp,
+                          preferredForMoreShifts: e.target.checked
+                        }))
+                      }
+                    />
+                    עדיפות ליותר משמרות
+                  </label>
 
-              {employee.availability.map((a, idx) => (
-                <div className="availability-row" key={`${employee.id}-${idx}`}>
-                  <select value={a.day} onChange={(e) => updateAvailability(employee.id, idx, { day: e.target.value })}>
-                    {DAYS.map((day) => (
-                      <option key={day.key} value={day.key}>
-                        {day.label}
-                      </option>
-                    ))}
-                  </select>
-                  <input type="time" value={a.start} onChange={(e) => updateAvailability(employee.id, idx, { start: e.target.value })} />
-                  <input type="time" value={a.end} onChange={(e) => updateAvailability(employee.id, idx, { end: e.target.value })} />
-                  <button onClick={() => removeAvailability(employee.id, idx)}>מחק</button>
+                  {employee.availability.map((a, idx) => (
+                    <div className="availability-row" key={`${employee.id}-${idx}`}>
+                      <select
+                        value={a.day}
+                        onChange={(e) => updateAvailability(employee.id, idx, { day: e.target.value })}
+                      >
+                        {DAYS.map((day) => (
+                          <option key={day.key} value={day.key}>
+                            {day.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="time"
+                        value={a.start}
+                        onChange={(e) => updateAvailability(employee.id, idx, { start: e.target.value })}
+                      />
+                      <input
+                        type="time"
+                        value={a.end}
+                        onChange={(e) => updateAvailability(employee.id, idx, { end: e.target.value })}
+                      />
+                      <button type="button" onClick={() => removeAvailability(employee.id, idx)}>
+                        מחק
+                      </button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => addAvailability(employee.id)}>
+                    + זמינות
+                  </button>
                 </div>
-              ))}
-              <button onClick={() => addAvailability(employee.id)}>+ זמינות</button>
-            </div>
-          ))}
-        </div>
-        <button onClick={generateSchedule} disabled={loading}>
-          {loading ? "מייצר..." : "צור סידור"}
-        </button>
-        {apiError ? <p className="error">{apiError}</p> : null}
+              ))
+            )}
+          </div>
+          <div className="form-actions">
+            <button type="submit" disabled={loading}>
+              {loading ? "מייצר..." : "צור סידור"}
+            </button>
+          </div>
+          {apiError ? (
+            <p className="error" role="alert">
+              {apiError}
+            </p>
+          ) : null}
+        </form>
       </section>
 
       {schedule ? (
         <section className="card">
           <h2>תוצאות סידור</h2>
           <div className="export-actions">
-            <button onClick={exportExcel}>ייצוא ל-Excel</button>
-            <button onClick={exportWord}>ייצוא ל-Word</button>
+            <button type="button" onClick={exportExcel}>
+              ייצוא ל-Excel
+            </button>
+            <button type="button" onClick={exportWord}>
+              ייצוא ל-Word
+            </button>
           </div>
           {schedule.warnings?.length ? (
             <div className="warn-box">

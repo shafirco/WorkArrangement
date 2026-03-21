@@ -33,6 +33,57 @@ body {
   flex-direction: column;
   gap: 8px;
   background: #fbfdff;
+  position: relative;
+}
+
+.employee-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.employee-box-title {
+  font-weight: 600;
+  color: #1a2a3d;
+  font-size: 0.95rem;
+}
+
+.btn-remove-employee {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  line-height: 1;
+  font-size: 1.25rem;
+  border-radius: 50%;
+  background: #e8edf5;
+  color: #4a5a6e;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-remove-employee:hover {
+  background: #f5d4d4;
+  color: #a32020;
+}
+
+.btn-remove-employee:focus-visible {
+  outline: 2px solid #1266d1;
+  outline-offset: 2px;
+}
+
+.empty-hint {
+  grid-column: 1 / -1;
+  margin: 8px 0;
+  color: #5a6a7e;
+  font-size: 0.95rem;
+}
+
+.schedule-form .form-actions {
+  margin-top: 12px;
 }
 
 .availability-row {

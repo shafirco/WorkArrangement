@@ -10,7 +10,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: "512kb" }));
 
 const availabilitySchema = z.object({
   day: z.enum(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]),
@@ -19,15 +19,15 @@ const availabilitySchema = z.object({
 });
 
 const employeeSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
+  id: z.string().min(1).max(120),
+  name: z.string().trim().min(1).max(200),
   isManager: z.boolean().default(false),
   preferredForMoreShifts: z.boolean().default(false),
-  availability: z.array(availabilitySchema).default([])
+  availability: z.array(availabilitySchema).max(50).default([])
 });
 
 const payloadSchema = z.object({
-  employees: z.array(employeeSchema).min(1)
+  employees: z.array(employeeSchema).min(1).max(120)
 });
 
 app.get("/api/health", (_req, res) => {
